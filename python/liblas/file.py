@@ -101,10 +101,8 @@ class File(object):
         self.ownheader = True
 
         # import pdb;pdb.set_trace()
-        if header != None:
-
-            self.ownheader = False
-            self._header = header.handle
+        if header is not None:
+            self._set_header(header.handle, False)
 
         self.handle = None
         self._mode = mode.lower()
@@ -129,6 +127,12 @@ class File(object):
                                             "reference to it" % filename)
         self.open()
 
+    def _set_header(self, new_value=None, owned=True):
+        if self._header is not None and self.ownheader:
+            core.las.LASHeader_Destroy(self._header)
+        self._header = new_value
+        self.ownheader = owned
+
     def open(self):
         """Open the file for processing, called by __init__
         """
@@ -138,15 +142,13 @@ class File(object):
             if not os.path.exists(self.filename):
                 raise OSError("No such file or directory: '%s'" % self.filename)
 
-            if self._header == None:
+            if self._header is None:
                 self.handle = core.las.LASReader_Create(self.filename)
-                self._header = core.las.LASReader_GetHeader(self.handle)
             else:
                 self.handle = \
                 core.las.LASReader_CreateWithHeader(self.filename,
                                                         self._header)
-            core.las.LASHeader_Destroy(self._header)
-            self._header = core.las.LASReader_GetHeader(self.handle)
+            self._set_header(core.las.LASReader_GetHeader(self.handle))
             self.mode = 0
             try:
                 files['read'][self.filename] += 1
@@ -162,14 +164,13 @@ class File(object):
 
         if self._mode == 'w' and '+' not in self._mode:
 
-            if self._header == None:
-                self._header = core.las.LASHeader_Create()
+            if self._header is None:
+                self._set_header(core.las.LASHeader_Create())
 
             self.handle = core.las.LASWriter_Create(self.filename,
                                                     self._header,
                                                     1)
-            core.las.LASHeader_Destroy(self._header)
-            self._header = core.las.LASWriter_GetHeader(self.handle)
+            self._set_header(core.las.LASWriter_GetHeader(self.handle))
             self.mode = 1
             files['write'].append(self.filename)
 
@@ -180,15 +181,14 @@ class File(object):
                                                 self.out_srs.handle)
 
         if '+' in self._mode and 'r' not in self._mode:
-            if self._header == None:
+            if self._header is None:
                 reader = core.las.LASReader_Create(self.filename)
-                self._header = core.las.LASReader_GetHeader(reader)
+                self._set_header(core.las.LASReader_GetHeader(reader))
                 core.las.LASReader_Destroy(reader)
             self.handle = core.las.LASWriter_Create(self.filename,
                                                     self._header,
                                                     2)
-            core.las.LASHeader_Destroy(self._header)
-            self._header = core.las.LASWriter_GetHeader(self.handle)
+            self._set_header(core.las.LASWriter_GetHeader(self.handle))
             self.mode = 2
             files['append'].append(self.filename)
 
@@ -226,10 +226,7 @@ class File(object):
                 files['write'].remove(self.filename)
             core.las.LASWriter_Destroy(self.handle)
 
-        if (self._header):
-            core.las.LASHeader_Destroy(self._header)
-
-        self._header = None
+        self._set_header(None)
         self.handle = None
 
     def set_srs(self, value):
@@ -285,7 +282,7 @@ class File(object):
         if self.mode == 2:
             core.las.LASWriter_Destroy(self.handle)
             self.handle = core.las.LASWriter_Create(self.handle, header, 2)
-            self._header = core.las.LASHeader_Copy(header.handle)
+            self._set_header(core.las.LASHeader_Copy(header.handle))
             return True
         raise core.LASException("The header can only be set "
                                 "after file creation for files in append mode")
